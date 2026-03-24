@@ -1,0 +1,14 @@
+File: Azan Madina Marwan Qassas .mp3
+Link Template: https://api.telegram.org/bot<TOKEN>/getFile?file_id=CQADBQADTxwAAiofoVRAqMVTlf9WbgI
+
+File: Azan Islam Sobhi .mp3
+Link Template: https://api.telegram.org/bot<TOKEN>/getFile?file_id=CQADBQADThwAAiofoVRZ_r_ad873VgI
+
+File: Azan by Nasir Al-Qatami .mp3
+Link Template: https://api.telegram.org/bot<TOKEN>/getFile?file_id=CQADBQADTRwAAiofoVSdnpFhi-lxQAI
+
+File: Adhan Fajr Mishary.mp3
+Link Template: https://api.telegram.org/bot<TOKEN>/getFile?file_id=CQADBQADTBwAAiofoVTFpCzHd0__EAI
+
+File: Adhan - Omar Hisham Al Arabi  .mp3
+Link Template: https://api.telegram.org/bot<TOKEN>/getFile?file_id=CQADBQADSxwAAiofoVSuQWlbrtIChQI

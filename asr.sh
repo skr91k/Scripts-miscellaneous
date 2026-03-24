@@ -15,8 +15,8 @@ TARGET_DURATION=19
 mkdir -p "$INPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-# Find any MP4 file in Downloads folder (excluding asr subfolder) to use as audio source
-AUDIO_SOURCE=$(find "$HOME/Downloads" -maxdepth 1 -name "*.mp4" -type f | head -1)
+# Audio source file
+AUDIO_SOURCE="$HOME/Yeat - Money So Big (Instrumental⧸TikTok Remix) [LuvQfwoUC6w].mp4"
 
 if [ -z "$AUDIO_SOURCE" ] || [ ! -f "$AUDIO_SOURCE" ]; then
     echo "Warning: No MP4 file found in ~/Downloads for audio"
