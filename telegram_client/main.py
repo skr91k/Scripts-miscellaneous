@@ -9,7 +9,12 @@ api_hash = '27443bac2a89e15ee1940302046a8d57'
 client = TelegramClient('session_name', api_id, api_hash)
 
 async def main():
-    target_user = 'intra915'
+    # Get target user from command line argument (required)
+    if len(sys.argv) < 3:
+        print("Usage: python main.py <file_path> <target_user>")
+        return
+
+    target_user = sys.argv[2]
 
     # Check for file path argument
     if len(sys.argv) > 1:
@@ -52,7 +57,7 @@ async def main():
                     content += f" Filename: {message.file.name}"
             elif not content:
                 content = "[Empty Message]"
-            
+
             print(f"ID: {message.id} | Date: {message.date} | Content: {content}")
     except Exception as e:
         print(f"Error fetching messages: {e}")
