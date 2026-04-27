@@ -296,7 +296,7 @@ def get_floats(days: list, day_idx: int) -> list:
         zx, zy, zw, zh = all_zones[i]
         sx = rng.randint(zx, min(zx + max(zw - 230, 1), W - 230))
         sy = rng.randint(zy, zy + max(zh - 28, 1))
-        alpha = rng.randint(48, 78) if i < len(below) else rng.randint(22, 42)
+        alpha = rng.randint(78, 98) if i < len(below) else rng.randint(22, 42)
         result.append((sym, pnl, sx, sy, alpha))
     return result
 
