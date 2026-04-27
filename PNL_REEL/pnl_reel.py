@@ -101,17 +101,19 @@ def prepare(fy_items: list) -> list:
             ts     = e["dateMilli"]
             ntpl   = e.get("ntpl", 0.0)
             trades = [(t["symbol"], t["tradePNL"]) for t in e.get("trades", [])]
+            expense = e.get("expense", 0.0)
             if ts in seen:
-                # Same date appears twice (e.g. Dec 31 split entries) — accumulate
-                seen[ts]["ntpl"]   += ntpl
-                seen[ts]["trades"] += trades
+                seen[ts]["ntpl"]    += ntpl
+                seen[ts]["expense"] += expense
+                seen[ts]["trades"]  += trades
             else:
                 seen[ts] = {
-                    "date":   datetime.fromtimestamp(ts / 1000),
-                    "ntpl":   ntpl,
-                    "trades": trades,
-                    "ts":     ts,
-                    "fy":     fy_label,
+                    "date":    datetime.fromtimestamp(ts / 1000),
+                    "ntpl":    ntpl,
+                    "expense": expense,
+                    "trades":  trades,
+                    "ts":      ts,
+                    "fy":      fy_label,
                 }
 
     days = sorted(seen.values(), key=lambda d: d["ts"])
@@ -322,64 +324,145 @@ def get_floats(days: list, day_idx: int) -> list:
 
 # ── Intro title card ──────────────────────────────────────────────────────────
 def render_intro(days: list, frame_num: int, total: int) -> Image.Image:
-    """2-second intro: fade in (0.5s) → hold (1s) → fade out (0.5s)."""
-    fade = int(total * 0.25)   # 25% = 0.5s fade each side
+    """4-second intro: fade in (0.5s) → hold → fade out (0.5s)."""
+    fade = int(total * 0.125)   # 0.5s each side
 
     if frame_num < fade:
-        alpha_mult = ease_inout(frame_num / fade)
+        alpha_mult = ease_inout(frame_num / max(fade, 1))
     elif frame_num >= total - fade:
-        alpha_mult = ease_inout((total - frame_num) / fade)
+        alpha_mult = ease_inout((total - frame_num) / max(fade, 1))
     else:
         alpha_mult = 1.0
+
+    # ── Compute trade stats ───────────────────────────────────────────────────
+    all_pnls     = [pnl for d in days for _, pnl in d["trades"]]
+    wins         = [p for p in all_pnls if p > 0]
+    losses       = [p for p in all_pnls if p < 0]
+    n_win        = len(wins)
+    n_loss       = len(losses)
+    avg_win      = sum(wins)   / n_win  if wins   else 0
+    avg_loss     = sum(losses) / n_loss if losses else 0
+    total_expense = sum(d.get("expense", 0) for d in days)
 
     total_years = (days[-1]["date"] - days[0]["date"]).days / 365.25
     years_str   = f"{int(total_years)}+ Years"
     final_cum   = days[-1]["cum"]
     cum_col     = GREEN if final_cum >= 0 else RED
 
-    line1 = "Reality of Trading"
-    line2 = f"{years_str} Trading Journey"
-    line3 = fmt_inr(final_cum)
-
-    f1 = fnt(72)
-    f2 = fnt(45, bold=True)
-    f3 = fnt(128, bold=True)
-
-    # Measure to center the block vertically
-    h1, h2, h3, gap = 84, 104, 148, 44
-    block_h = h1 + gap + h2 + gap + h3
-    start_y = (H - block_h) // 2
+    # Fonts
+    f1       = fnt(72)
+    f2       = fnt(45, bold=True)
+    f3       = fnt(128, bold=True)
+    f_lbl    = fnt(34)
+    f_val    = fnt(52, bold=True)
 
     img      = Image.new("RGB", (W, H), BG)
     img_rgba = img.convert("RGBA")
 
-    def alpha_layer(text, font, y, color):
-        r, g, b = color
-        a       = int(alpha_mult * 255)
-        lay     = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        ld      = ImageDraw.Draw(lay)
+    def draw_centered(lay, text, font, y, color):
+        ld = ImageDraw.Draw(lay)
         try:
             tw = int(ld.textlength(text, font=font))
         except Exception:
             tw = 500
+        r, g, b = color
+        a = int(alpha_mult * 255)
         ld.text(((W - tw) // 2, y), text, font=font, fill=(r, g, b, a))
+
+    def draw_at(lay, text, font, x, y, color, anchor="left"):
+        ld = ImageDraw.Draw(lay)
+        try:
+            tw = int(ld.textlength(text, font=font))
+        except Exception:
+            tw = 300
+        r, g, b = color
+        a = int(alpha_mult * 255)
+        ox = x - tw if anchor == "right" else x
+        ld.text((ox, y), text, font=font, fill=(r, g, b, a))
+
+    def divider(y, width=300):
+        lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ld  = ImageDraw.Draw(lay)
+        ld.line([((W - width) // 2, y), ((W + width) // 2, y)],
+                fill=(60, 60, 100, int(alpha_mult * 160)), width=1)
         return lay
 
-    y = start_y
-    img_rgba = Image.alpha_composite(img_rgba, alpha_layer(line1, f1, y,      GRAY))
+    # ── Layout heights ────────────────────────────────────────────────────────
+    h1, h2, h3  = 84, 52, 150
+    gap         = 40
+    stats_lbl_h = 38
+    stats_val_h = 60
+    stats_gap   = 24
+    # Total: h1+gap+h2+gap+h3 + gap*2 + divider + (lbl+val)*2 + stats_gap
+    block_h = (h1 + gap + h2 + gap + h3 +
+               gap * 2 +
+               stats_lbl_h + stats_val_h + stats_gap +
+               stats_lbl_h + stats_val_h)
+    y = (H - block_h) // 2
+
+    # Line 1: "Reality of Trading"
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_centered(lay, "Reality of Trading", f1, y, GRAY)
+    img_rgba = Image.alpha_composite(img_rgba, lay)
     y += h1 + gap
 
-    # Thin divider line between line1 and line2
-    div_lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    dd      = ImageDraw.Draw(div_lay)
-    lx      = W // 2 - 160
-    dd.line([(lx, y - 10), (lx + 320, y - 10)],
-            fill=(60, 60, 100, int(alpha_mult * 180)), width=1)
-    img_rgba = Image.alpha_composite(img_rgba, div_lay)
+    img_rgba = Image.alpha_composite(img_rgba, divider(y - 10, 320))
 
-    img_rgba = Image.alpha_composite(img_rgba, alpha_layer(line2, f2, y,      WHITE))
+    # Line 2: "X+ Years Trading Journey"
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_centered(lay, f"{years_str} Trading Journey", f2, y, WHITE)
+    img_rgba = Image.alpha_composite(img_rgba, lay)
     y += h2 + gap
-    img_rgba = Image.alpha_composite(img_rgba, alpha_layer(line3, f3, y,      cum_col))
+
+    # Line 3: Final cumulative PNL
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_centered(lay, fmt_inr(final_cum), f3, y, cum_col)
+    img_rgba = Image.alpha_composite(img_rgba, lay)
+    y += h3 + gap * 2
+
+    img_rgba = Image.alpha_composite(img_rgba, divider(y - 10, 900))
+
+    # ── Stats: 2 columns × 2 rows ─────────────────────────────────────────────
+    col_l = 120   # left column x
+    col_r = W - 120  # right column x (right-aligned)
+
+    # Row 1: Winning trades | Losing trades
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_at(lay, "Winning Trades", f_lbl, col_l, y, GRAY)
+    draw_at(lay, "Losing Trades",  f_lbl, col_r, y, GRAY, anchor="right")
+    img_rgba = Image.alpha_composite(img_rgba, lay)
+    y += stats_lbl_h
+
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_at(lay, str(n_win),  f_val, col_l, y, GREEN)
+    draw_at(lay, str(n_loss), f_val, col_r, y, RED, anchor="right")
+    img_rgba = Image.alpha_composite(img_rgba, lay)
+    y += stats_val_h + stats_gap
+
+    # Row 2: Avg win | Avg loss
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_at(lay, "Avg Win",  f_lbl, col_l, y, GRAY)
+    draw_at(lay, "Avg Loss", f_lbl, col_r, y, GRAY, anchor="right")
+    img_rgba = Image.alpha_composite(img_rgba, lay)
+    y += stats_lbl_h
+
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_at(lay, fmt_inr(avg_win),  f_val, col_l, y, GREEN)
+    draw_at(lay, fmt_inr(avg_loss), f_val, col_r, y, RED, anchor="right")
+    img_rgba = Image.alpha_composite(img_rgba, lay)
+    y += stats_val_h + stats_gap
+
+    img_rgba = Image.alpha_composite(img_rgba, divider(y - 10, 900))
+
+    # Row 3: Expenses (centred — single value explaining the gap)
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_centered(lay, "Brokerage & Taxes", f_lbl, y, GRAY)
+    img_rgba = Image.alpha_composite(img_rgba, lay)
+    y += stats_lbl_h
+
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_centered(lay, f"−₹{total_expense:,.0f}", f_val, y, (180, 80, 80))
+    img_rgba = Image.alpha_composite(img_rgba, lay)
 
     return img_rgba.convert("RGB")
 
@@ -550,7 +633,7 @@ def main():
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
 
     # ── 2-second intro title card ─────────────────────────────────────────────
-    intro_total = FPS * 2   # 60 frames
+    intro_total = FPS * 4   # 4 seconds
     for fn in range(intro_total):
         frm = render_intro(days, fn, intro_total)
         proc.stdin.write(frm.tobytes())
