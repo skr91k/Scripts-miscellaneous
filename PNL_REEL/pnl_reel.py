@@ -24,6 +24,8 @@ AUDIO = os.path.expanduser("~/Desktop/bgms/Need for Speed 5： Porsche OST - Rez
 FPS = 30
 FRAMES_PER_DAY = 4    # 395 days × 6 / 30 ≈ 79 s
 LAST_N_DAYS = 1000000    # None = all days; set e.g. 5 to show only last 5 days
+FY_TITLE_FILTER="FY 2025-2026"
+REEL_TITLE="Trading Journey\nFY 2025-2026"
 
 # Frame dimensions (9:16 portrait reel)
 W, H = 1080, 1920
@@ -86,7 +88,7 @@ def fetch() -> list:
     r = requests.get(URL, timeout=30)
     r.raise_for_status()
     # Only titles that contain "FY" — avoids calendar-year duplicates
-    fy_items = [item for item in r.json() if "FY" in item.get("title", "")]
+    fy_items = [item for item in r.json() if FY_TITLE_FILTER in item.get("title", "")]
     if not fy_items:
         raise ValueError("No FY entries found in Firebase data")
     print(f"  FY entries found: {[i['title'] for i in fy_items]}", flush=True)
@@ -344,8 +346,6 @@ def render_intro(days: list, frame_num: int, total: int) -> Image.Image:
     avg_loss     = sum(losses) / n_loss if losses else 0
     total_expense = sum(d.get("expense", 0) for d in days)
 
-    total_years = (days[-1]["date"] - days[0]["date"]).days / 365.25
-    years_str   = f"{int(total_years)}+ Years"
     final_cum   = days[-1]["cum"]
     cum_col     = GREEN if final_cum >= 0 else RED
 
@@ -361,13 +361,15 @@ def render_intro(days: list, frame_num: int, total: int) -> Image.Image:
 
     def draw_centered(lay, text, font, y, color):
         ld = ImageDraw.Draw(lay)
-        try:
-            tw = int(ld.textlength(text, font=font))
-        except Exception:
-            tw = 500
         r, g, b = color
         a = int(alpha_mult * 255)
-        ld.text(((W - tw) // 2, y), text, font=font, fill=(r, g, b, a))
+        line_h = getattr(font, 'size', 45) + 8
+        for i, line in enumerate(text.split("\n")):
+            try:
+                tw = int(ld.textlength(line, font=font))
+            except Exception:
+                tw = 500
+            ld.text(((W - tw) // 2, y + i * line_h), line, font=font, fill=(r, g, b, a))
 
     def draw_at(lay, text, font, x, y, color, anchor="left"):
         ld = ImageDraw.Draw(lay)
@@ -388,8 +390,11 @@ def render_intro(days: list, frame_num: int, total: int) -> Image.Image:
         return lay
 
     # ── Layout heights ────────────────────────────────────────────────────────
-    h1, h2, h3  = 84, 52, 150
-    gap         = 40
+    n_title_lines = len(REEL_TITLE.split("\n"))
+    h1  = 84
+    h2  = 45 * n_title_lines + 8 * (n_title_lines - 1)   # font-45 lines + gaps
+    h3  = 150
+    gap = 40
     stats_lbl_h = 38
     stats_val_h = 60
     stats_gap   = 24
@@ -408,9 +413,9 @@ def render_intro(days: list, frame_num: int, total: int) -> Image.Image:
 
     img_rgba = Image.alpha_composite(img_rgba, divider(y - 10, 320))
 
-    # Line 2: "X+ Years Trading Journey"
+    # Line 2: REEL_TITLE
     lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    draw_centered(lay, f"{years_str} Trading Journey", f2, y, WHITE)
+    draw_centered(lay, REEL_TITLE, f2, y, WHITE)
     img_rgba = Image.alpha_composite(img_rgba, lay)
     y += h2 + gap
 
@@ -527,16 +532,16 @@ def compose_frame(
     img = img_rgba.convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    # ── Title: "X Years Trading Journey" ─────────────────────────────────────
-    total_years = (days[-1]["date"] - days[0]["date"]).days / 365.25
-    years_str   = f"{int(total_years)}+ Years" if total_years % 1 >= 0.1 else f"{int(total_years)} Years"
-    main_title  = f"{years_str} Trading Journey"
+    # ── Title: REEL_TITLE (supports \n for two lines) ────────────────────────
     tf = fnt(27, bold=True)
-    try:
-        tw = int(draw.textlength(main_title, font=tf))
-    except Exception:
-        tw = 600
-    draw.text(((W - tw) // 2, 48), main_title, font=tf, fill=WHITE)
+    ty = 48
+    for line in REEL_TITLE.split("\n"):
+        try:
+            tw = int(draw.textlength(line, font=tf))
+        except Exception:
+            tw = 600
+        draw.text(((W - tw) // 2, ty), line, font=tf, fill=WHITE)
+        ty += 31
 
     # ── Cumulative PNL (big animated number) ──────────────────────────────────
     cum_col = GREEN if shown_cum >= 0 else RED
