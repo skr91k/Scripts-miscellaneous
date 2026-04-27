@@ -241,12 +241,33 @@ def render_graph(days_so_far: list, all_days: list = None) -> tuple[Image.Image,
 
     return img.convert("RGB"), last_pt
 
+# ── Symbol name cleaner ───────────────────────────────────────────────────────
+def clean_symbol(sym: str) -> str:
+    parts = sym.split()
+    if not parts:
+        return sym
+    # "IO CE NIFTY 17Apr2025 23000" → "NIFTY 23000 CE 17Apr2025"
+    if parts[0] == "IO" and len(parts) >= 3 and parts[1] in ("CE", "PE"):
+        underlying, opt = parts[2], parts[1]
+        date   = parts[3] if len(parts) > 3 else ""
+        strike = parts[4] if len(parts) > 4 else ""
+        tail   = parts[5:] if len(parts) > 5 else []
+        return " ".join(filter(None, [underlying, strike, opt, date] + tail))
+    # "CF NIFTY ..." → "NIFTY ..."
+    if parts[0] == "CF":
+        return " ".join(parts[1:])
+    return sym
+
 # ── Float symbol generator ─────────────────────────────────────────────────────
 def get_floats(days: list, day_idx: int) -> list:
     """Return list of (symbol, pnl, x, y, alpha) for floating overlay."""
-    rng = random.Random((day_idx // 5) * 7919 + 42)  # rotate every 5 days → 30 frames = 1s at 6fpd
+    # Fixed 5-day block: days 0-4 → block 0, days 5-9 → block 1, …
+    block      = day_idx // 5
+    block_start = block * 5
+    block_end   = min(block_start + 5, len(days))
+    rng  = random.Random(block * 7919 + 42)
     pool = []
-    for d in days[max(0, day_idx - 20): day_idx + 1]:
+    for d in days[block_start:block_end]:
         pool.extend(d["trades"])
     if not pool:
         return []
@@ -414,7 +435,7 @@ def compose_frame(
     sf = fnt(35)
     pf = fnt(30)
     for sym, pnl, sx, sy, alpha in floats:
-        short = sym[:20]
+        short = clean_symbol(sym)[:22]
         col   = GREEN if pnl >= 0 else RED
         sd.text((sx, sy),      short,        font=sf, fill=(*col, alpha))
         sd.text((sx, sy + 42), fmt_inr(pnl), font=pf, fill=(200, 200, 210, max(alpha - 20, 15)))
