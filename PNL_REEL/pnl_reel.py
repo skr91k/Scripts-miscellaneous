@@ -23,6 +23,7 @@ OUT   = "PNL_REEL/pnl_reel_all_fy.mp4"
 AUDIO = os.path.expanduser("~/Desktop/bgms/Need for Speed 5： Porsche OST - Rezidue.mp3")
 FPS = 30
 FRAMES_PER_DAY = 4    # 395 days × 6 / 30 ≈ 79 s
+LAST_N_DAYS = 1000000    # None = all days; set e.g. 5 to show only last 5 days
 
 # Frame dimensions (9:16 portrait reel)
 W, H = 1080, 1920
@@ -252,24 +253,22 @@ def get_floats(days: list, day_idx: int) -> list:
 
     graph_bot = GRAPH_Y + GRAPH_H_PX  # bottom of graph = 1280
 
-    # ── Below-graph zones (higher alpha — clearly readable) ───────────────────
+    # ── Below-graph zones — row step = 85px to fit sf=35 + pf=30 without collision
     below = [
-        (30,  graph_bot + 10,  490, 52),
-        (560, graph_bot + 10,  490, 52),
-        (30,  graph_bot + 72,  490, 52),
-        (560, graph_bot + 72,  490, 52),
-        (30,  graph_bot + 134, 490, 52),
-        (560, graph_bot + 134, 490, 52),
-        (30,  graph_bot + 196, 490, 52),
-        (560, graph_bot + 196, 490, 52),
-        (30,  graph_bot + 258, 490, 52),
-        (560, graph_bot + 258, 490, 52),
-        (30,  graph_bot + 320, 490, 52),
-        (560, graph_bot + 320, 490, 52),
-        (30,  graph_bot + 382, 490, 52),
-        (560, graph_bot + 382, 490, 52),
-        (30,  graph_bot + 444, 490, 52),
-        (560, graph_bot + 444, 490, 52),
+        (30,  graph_bot + 10,  490, 78),
+        (560, graph_bot + 10,  490, 78),
+        (30,  graph_bot + 95,  490, 78),
+        (560, graph_bot + 95,  490, 78),
+        (30,  graph_bot + 180, 490, 78),
+        (560, graph_bot + 180, 490, 78),
+        (30,  graph_bot + 265, 490, 78),
+        (560, graph_bot + 265, 490, 78),
+        (30,  graph_bot + 350, 490, 78),
+        (560, graph_bot + 350, 490, 78),
+        (30,  graph_bot + 435, 490, 78),
+        (560, graph_bot + 435, 490, 78),
+        (30,  graph_bot + 520, 490, 78),
+        (560, graph_bot + 520, 490, 78),
     ]
 
     # ── Graph-overlay zones (lower alpha — ghost text over chart) ─────────────
@@ -296,7 +295,7 @@ def get_floats(days: list, day_idx: int) -> list:
         zx, zy, zw, zh = all_zones[i]
         sx = rng.randint(zx, min(zx + max(zw - 230, 1), W - 230))
         sy = rng.randint(zy, zy + max(zh - 28, 1))
-        alpha = rng.randint(78, 98) if i < len(below) else rng.randint(22, 42)
+        alpha = rng.randint(68, 88) if i < len(below) else rng.randint(32, 52)
         result.append((sym, pnl, sx, sy, alpha))
     return result
 
@@ -412,13 +411,13 @@ def compose_frame(
     # ── Floating symbols ──────────────────────────────────────────────────────
     sym_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     sd = ImageDraw.Draw(sym_layer)
-    sf = fnt(27)
-    pf = fnt(23)
+    sf = fnt(35)
+    pf = fnt(30)
     for sym, pnl, sx, sy, alpha in floats:
         short = sym[:20]
         col   = GREEN if pnl >= 0 else RED
         sd.text((sx, sy),      short,        font=sf, fill=(*col, alpha))
-        sd.text((sx, sy + 27), fmt_inr(pnl), font=pf, fill=(200, 200, 210, max(alpha - 20, 15)))
+        sd.text((sx, sy + 42), fmt_inr(pnl), font=pf, fill=(200, 200, 210, max(alpha - 20, 15)))
 
     img_rgba = Image.alpha_composite(img_rgba, sym_layer)
     img = img_rgba.convert("RGB")
@@ -486,7 +485,17 @@ def compose_frame(
 def main():
     fy_items = fetch()
     days     = prepare(fy_items)
-    n        = len(days)
+
+    if LAST_N_DAYS is not None:
+        days = days[-LAST_N_DAYS:]
+        # Recompute cumulative from zero for the slice
+        cum = 0.0
+        for d in days:
+            cum += d["ntpl"]
+            d["cum"] = cum
+        print(f"  Sliced to last {LAST_N_DAYS} days", flush=True)
+
+    n = len(days)
 
     if n == 0:
         print("No PNL data found in any FY entry")
@@ -570,7 +579,9 @@ def main():
             "-shortest",
             out_audio,
         ], check=True)
-        print(f"  With audio  → {out_audio}")
+        os.remove(OUT)   # remove silent version
+        os.rename(out_audio, OUT)
+        print(f"  Final (with audio) → {OUT}")
     else:
         print(f"  Audio file not found: {AUDIO}")
 
