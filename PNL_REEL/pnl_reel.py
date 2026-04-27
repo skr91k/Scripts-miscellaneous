@@ -10,7 +10,6 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import subprocess
 import os
@@ -19,10 +18,11 @@ import io
 from datetime import datetime
 
 # ── Config ────────────────────────────────────────────────────────────────────
-URL = "https://bhavpc-default-rtdb.asia-southeast1.firebasedatabase.app/pnlsudokutrader.json"
-OUT = "PNL_REEL/pnl_reel_all_fy.mp4"
+URL   = "https://bhavpc-default-rtdb.asia-southeast1.firebasedatabase.app/pnlsudokutrader.json"
+OUT   = "PNL_REEL/pnl_reel_all_fy.mp4"
+AUDIO = os.path.expanduser("~/Desktop/bgms/Need for Speed 5： Porsche OST - Rezidue.mp3")
 FPS = 30
-FRAMES_PER_DAY = 10   # frames per day (398 days × 10 / 30 ≈ 133 s)
+FRAMES_PER_DAY = 4    # 395 days × 6 / 30 ≈ 79 s
 
 # Frame dimensions (9:16 portrait reel)
 W, H = 1080, 1920
@@ -243,7 +243,7 @@ def render_graph(days_so_far: list, all_days: list = None) -> tuple[Image.Image,
 # ── Float symbol generator ─────────────────────────────────────────────────────
 def get_floats(days: list, day_idx: int) -> list:
     """Return list of (symbol, pnl, x, y, alpha) for floating overlay."""
-    rng = random.Random(day_idx * 7919 + 42)
+    rng = random.Random((day_idx // 5) * 7919 + 42)  # rotate every 5 days → 30 frames = 1s at 6fpd
     pool = []
     for d in days[max(0, day_idx - 20): day_idx + 1]:
         pool.extend(d["trades"])
@@ -322,7 +322,7 @@ def render_intro(days: list, frame_num: int, total: int) -> Image.Image:
     line3 = fmt_inr(final_cum)
 
     f1 = fnt(72)
-    f2 = fnt(90, bold=True)
+    f2 = fnt(45, bold=True)
     f3 = fnt(128, bold=True)
 
     # Measure to center the block vertically
@@ -412,8 +412,8 @@ def compose_frame(
     # ── Floating symbols ──────────────────────────────────────────────────────
     sym_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     sd = ImageDraw.Draw(sym_layer)
-    sf = fnt(22)
-    pf = fnt(19)
+    sf = fnt(27)
+    pf = fnt(23)
     for sym, pnl, sx, sy, alpha in floats:
         short = sym[:20]
         col   = GREEN if pnl >= 0 else RED
@@ -428,7 +428,7 @@ def compose_frame(
     total_years = (days[-1]["date"] - days[0]["date"]).days / 365.25
     years_str   = f"{int(total_years)}+ Years" if total_years % 1 >= 0.1 else f"{int(total_years)} Years"
     main_title  = f"{years_str} Trading Journey"
-    tf = fnt(54, bold=True)
+    tf = fnt(27, bold=True)
     try:
         tw = int(draw.textlength(main_title, font=tf))
     except Exception:
@@ -542,7 +542,37 @@ def main():
 
     proc.stdin.close()
     proc.wait()
-    print(f"\n\nDone → {OUT}")
+    print(f"\n\nVideo ready → {OUT}")
+
+    # ── Mux audio ────────────────────────────────────────────────────────────
+    if os.path.exists(AUDIO):
+        out_audio = OUT.replace(".mp4", "_audio.mp4")
+        # Get actual video duration for the fade-out point
+        probe = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+             "-of", "csv=p=0", OUT],
+            capture_output=True, text=True
+        )
+        vid_dur = float(probe.stdout.strip())
+        fade_start = max(0, vid_dur - 2.0)
+
+        print(f"  Adding audio (fade-out at {fade_start:.1f}s)...", flush=True)
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", OUT,
+            "-i", AUDIO,
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-af", f"afade=t=out:st={fade_start:.2f}:d=2",
+            "-shortest",
+            out_audio,
+        ], check=True)
+        print(f"  With audio  → {out_audio}")
+    else:
+        print(f"  Audio file not found: {AUDIO}")
 
 if __name__ == "__main__":
     main()
